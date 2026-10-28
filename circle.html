@@ -2,122 +2,56 @@
 <html>
     <body>
 
-    <canvas id="myCanvas" width="400" height="400" style="border:1px solid #d3d3d3;">
-    Your browser does not support the HTML5 canvas tag.</canvas>
+    <div id="myCanvas"></div>
 
     <script>
 
     var c = document.getElementById("myCanvas");
-    var ctx = c.getContext("2d");
 
-    var size = 2;
+    fetch("circle.bf").then(function(response) {
+        return response.text();
+    }).then(function(program) {
+        var frames = Brainfuck(program);
+        frames.next();
 
-    var arcAmount = 8;
-    var first = 10;
-    var width = 5;
-    var padding = 2;
-    var colors = [ "1674BC", "00A396", "82C741", "F5B52E", "ED5B35", "EA225E", "C22286", "612E8D" ];
-    var positions = [];
+        setInterval(function(){
+            c.innerHTML = frames.next(1).value;
+        }, 16);
+    });
 
-    for(var i = 0; i < arcAmount; i++) {
-        positions.push(45 * i);
-    }
+    // Runs a Brainfuck program on an 8-bit tape and hands back its output whenever it reads a byte
+    function* Brainfuck(program) {
+        var code = program.replace(/[^+\-<>[\].,]/g, "");
+        var jumps = [];
+        var open = [];
 
-    setInterval(function(){
-        for(var i in positions) {
-            positions[i] += Number(i) + 1;
+        for(var i = 0; i < code.length; i++) {
+            if (code[i] == "[") {
+                open.push(i);
+            } else if (code[i] == "]") {
+                var j = open.pop();
+                jumps[i] = j;
+                jumps[j] = i;
+            }
         }
-        Draw();
-    }, 16);
 
-    function Draw() {
-        ctx.clearRect(0, 0, c.width, c.height);
+        var tape = new Uint8Array(30000);
+        var ptr = 0;
+        var output = "";
 
-        for (var i = 0; i < arcAmount; i++) {
-            ctx.beginPath(); 
-            var canvasSize = Math.min(c.width, c.height);
-            var r1 = first + (width + padding) * i;
-            var r2 = first + (width + padding) * i + width;
-
-            var rLast = first + (width + padding) * (arcAmount - 1) + width;
-            var offset = canvasSize / 2;
-            size = offset / rLast;
-
-            r1 *= size;
-            r2 *= size;
-            
-            var rad = (positions[i] / 360) * (2 * Math.PI);
-            var startV = { x: Math.cos(rad), y: Math.sin(rad) };
-            var midV = { x: Math.cos(rad + (Math.PI / 2)), y: Math.sin(rad + (Math.PI / 2)) };
-            var endV = { x: Math.cos(rad + Math.PI), y: Math.sin(rad + Math.PI) };
-            
-            startV = roundV(startV);
-            midV = roundV(midV);
-            endV = roundV(endV);
-            
-            var startV11 = { x: startV.x * r1, y: startV.y * r1 };
-            startV11 = AddV(startV11, rotLeft(startV11));
-            startV11 = AddNum(startV11, offset);
-            var endV11 = { x: midV.x * r1 + offset, y: midV.y * r1 + offset };
-            var startV12 = { x: midV.x * r1, y: midV.y * r1 };
-            startV12 = AddV(startV12, rotLeft(startV12));
-            startV12 = AddNum(startV12, offset);
-            var endV12 = { x: endV.x * r1 + offset, y: endV.y * r1 + offset };
-            
-            var startV21 = { x: endV.x * r2, y: endV.y * r2 };
-            startV21 = AddV(startV21, rotRight(startV21));
-            startV21 = AddNum(startV21, offset);
-            var endV21 = { x: midV.x * r2 + offset, y: midV.y * r2 + offset };
-            var startV22 = { x: midV.x * r2 , y: midV.y * r2 };
-            startV22 = AddV(startV22, rotRight(startV22));
-            startV22 = AddNum(startV22, offset);
-            var endV22 = { x: startV.x * r2 + offset, y: startV.y * r2 + offset };
-        
-            ctx.moveTo(startV.x * r1 + offset, startV.y * r1 + offset);
-        
-            ctx.arcTo(startV11.x, startV11.y, endV11.x, endV11.y, r1);
-            ctx.arcTo(startV12.x, startV12.y, endV12.x, endV12.y, r1);
-        
-            ctx.lineTo(endV.x * r2 + offset, endV.y * r2 + offset);
-        
-            ctx.arcTo(startV21.x, startV21.y, endV21.x, endV21.y, r2);
-            ctx.arcTo(startV22.x, startV22.y, endV22.x, endV22.y, r2);
-        
-            ctx.fillStyle = "#" + colors[i];
-            ctx.fill();
+        for(var pc = 0; pc < code.length; pc++) {
+            switch (code[pc]) {
+                case "+": tape[ptr]++; break;
+                case "-": tape[ptr]--; break;
+                case ">": ptr++; break;
+                case "<": ptr--; break;
+                case ".": output += String.fromCharCode(tape[ptr]); break;
+                case ",": tape[ptr] = yield output; output = ""; break;
+                case "[": if (!tape[ptr]) pc = jumps[pc]; break;
+                case "]": if (tape[ptr]) pc = jumps[pc]; break;
+            }
         }
-    }
-
-    function roundV(v) {
-        return { x: round(v.x), y: round(v.y) };
-    }
-    function round(num) {
-        return Math.round(num * 1000) / 1000;
-    }
-
-    function rotLeft(vec) {
-        var v = Object.assign({x: 0, y: 0}, vec);
-
-        var temp = v.y;
-        v.y = v.x;
-        v.x = -temp;
-
-        return v;
-    }
-    function rotRight(vec) {
-        var v = Object.assign({x: 0, y: 0}, vec);
-
-        var temp = v.x;
-        v.x = v.y;
-        v.y = -temp;
-
-        return v;
-    }
-    function AddV(v1, v2) {
-        return { x: v1.x + v2.x, y: v1.y + v2.y };
-    }
-    function AddNum(v1, num) {
-        return { x: v1.x + num, y: v1.y + num };
+        return output;
     }
 
     </script> 
